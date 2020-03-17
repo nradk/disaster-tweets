@@ -10,10 +10,10 @@ Take the following steps to setup your environment for running training and/or
 inference:
 
 1. **Download Data**
-Download the data files from the [Kaggle Competition webpage](https://www.
-kaggle.com/c/nlp-getting-started/data) and place them a directory named `data/`
-in the project directory. There should be (at least) two files in `data/`:
-`test.csv` and `train.csv`.
+Download the data files from the
+[Kaggle Competition webpage](https://www.kaggle.com/c/nlp-getting-started/data)
+and place them a directory named `data/` in the project directory. There should
+be (at least) two files in `data/`: `test.csv` and `train.csv`.
 
 2. **Setup Virtual Environment**
 Create a virtual environment in the project directory if you haven't already.
