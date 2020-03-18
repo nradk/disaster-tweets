@@ -42,3 +42,10 @@ Deactivate the virtual environment if you're done working with the project
 $ deactivate
 ```
 
+3. **Download SpaCy Language Model**
+We are using SpaCy to pre-process text. SpaCy needs the language model file we
+will use to be downloaded beforehand. To do that, run
+
+```
+$ python3 -m spacy download en_core_web_sm
+```
