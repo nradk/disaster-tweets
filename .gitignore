@@ -144,3 +144,6 @@ static
 
 # Ignore the data directory
 data/
+
+# Ignore vim swap files
+.*.swp

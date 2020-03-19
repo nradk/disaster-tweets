@@ -28,7 +28,7 @@ sample_df = pd.read_csv(sample_file, header=0)
 nlp = spacy.load("en_core_web_lg")
 
 # Compile url regex (a basic one)
-url_regex = re.compile("(http|https)://[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+url_regex = re.compile("(http|https)://[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(/\S*)?")
 # Compile regex to detect tokens that are entirely non-text
 nontext_regex = re.compile("[^A-Za-z]+")
 # Compile regex to detect @ mentions
@@ -37,6 +37,29 @@ mention_regex = re.compile("@\S+")
 misenc_regex = re.compile("&amp;");
 # Compile regex to check if text is composed entirely of letters and digits
 alphanum_regex = re.compile("[A-Za-z0-9]+");
+# Compile regex to check if text is a hashtag
+
+
+# Data cleaning prior to tokenization
+def clean_pre_tokenize(text):
+    text = url_regex.sub("", text)
+    text = misenc_regex.sub("", text)
+    text = mention_regex.sub("", text)
+    text = re.sub("#", "", text)
+    words = text.split(" ")
+    split_words = []
+    for word in words:
+        if not nlp.vocab.has_vector(word):
+            split_words.extend(wordninja.split(word))
+        else:
+            split_words.append(word)
+    return " ".join(split_words)
+
+
+# Data cleaning after tokenization (takes token list and returns word list)
+def clean_post_tokenize(token_list):
+    # Filter the list to remove non-text tokens and return result
+    return filter(lambda t: not t.is_oov and not t.is_stop, token_list)
 
 
 # Load tokenized tweets if we have already saved them
@@ -49,6 +72,9 @@ if os.path.isfile(tokenized_pickle) and not ALWAYS_COMPUTE:
 else:
     print("Saved tokenized data file not found, generating...")
     start = time.time()
+    # Perform pre-tokenization cleaning
+    train_df["text"] = train_df["text"].map(clean_pre_tokenize)
+    # Perform tokenization
     tweet_docs = train_df["text"].map(nlp)
     print("Generated in " + str(time.time() - start) + "s.")
     if not ALWAYS_COMPUTE:
@@ -57,38 +83,7 @@ else:
         tweet_docs.to_pickle(tokenized_pickle)
         print("Saved in " + str(time.time() - start) + "s.")
 
-def clean(token_list):
-    token_filters = [
-            lambda t: url_regex.search(t.lemma_.lower()) is None,
-            lambda t: nontext_regex.fullmatch(t.lemma_.lower()) is None,
-            lambda t: mention_regex.match(t.lemma_.lower()) is None,
-            ]
-    # Apply filters
-    token_list = filter(lambda t: all([f(t) for f in token_filters]),
-            token_list)
-
-    # Split possible joined words (like #HashTags)
-    new_token_list = []
-    is_oov = nlp.vocab.has_vector
-    for token in token_list:
-        if not is_oov(token.text) and not is_oov(token.lemma_):
-            split = wordninja.split(token.lemma_.lower())
-            print(token.text, ":", split)
-            if all([nlp.vocab.has_vector(w) or alphanum_regex.fullmatch(w)
-                    for w in split]):
-                new_token_list.extend(split)
-        else:
-            new_token_list.append(token.lemma_.lower())
-    return new_token_list
-
 # Clean tokens
-tweet_texts = [clean(tweet_doc) for tweet_doc in tweet_docs]
-
-# Make a grand list of all tokens by flattening above list
-all_words = [token for tweet in tweet_texts for token in tweet]
-
-# Count words
-word_counter = Counter(all_words)
-sorted_words_with_counts = word_counter.most_common()
-print(sorted_words_with_counts)
-print("Length of word counter is", len(word_counter))
+train_df["text"] = [list(clean_post_tokenize(tweet_doc)) for tweet_doc in
+        tweet_docs]
+print(train_df.head())
