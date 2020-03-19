@@ -11,7 +11,6 @@ import re
 import wordninja
 
 DATA_DIR = 'data/'
-ALWAYS_COMPUTE = True
 
 train_file = DATA_DIR + 'train.csv'
 test_file = DATA_DIR + 'test.csv'
@@ -62,28 +61,20 @@ def clean_post_tokenize(token_list):
     return filter(lambda t: not t.is_oov and not t.is_stop, token_list)
 
 
-# Load tokenized tweets if we have already saved them
-tweet_docs = None
-if os.path.isfile(tokenized_pickle) and not ALWAYS_COMPUTE:
-    print("Saved tokenized data file found, loading...")
-    start = time.time()
-    tweet_docs = pd.read_pickle(tokenized_pickle)
-    print("Loaded in " + str(time.time() - start) + "s.")
-else:
-    print("Saved tokenized data file not found, generating...")
-    start = time.time()
-    # Perform pre-tokenization cleaning
-    train_df["text"] = train_df["text"].map(clean_pre_tokenize)
-    # Perform tokenization
-    tweet_docs = train_df["text"].map(nlp)
-    print("Generated in " + str(time.time() - start) + "s.")
-    if not ALWAYS_COMPUTE:
-        print("Saving tokenized data file...")
-        start = time.time()
-        tweet_docs.to_pickle(tokenized_pickle)
-        print("Saved in " + str(time.time() - start) + "s.")
+print("Performing pre-tokenization cleaning...")
+start = time.time()
+# Perform pre-tokenization cleaning
+train_df["text"] = train_df["text"].map(clean_pre_tokenize)
+print("Cleaned in", (time.time() - start), "seconds. Now tokenizing...")
+start = time.time()
+# Perform tokenization
+tweet_docs = train_df["text"].map(nlp)
+print("Tokenized in " + str(time.time() - start) + "s.")
 
 # Clean tokens
+print("Performing post-tokenization cleaning...")
+start = time.time()
 train_df["text"] = [list(clean_post_tokenize(tweet_doc)) for tweet_doc in
         tweet_docs]
+print("Cleaned in in " + str(time.time() - start) + "s.")
 print(train_df.head())
