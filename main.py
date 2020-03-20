@@ -9,6 +9,9 @@ import time
 from collections import Counter
 import re
 import wordninja
+import functools
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import cross_val_score
 
 DATA_DIR = 'data/'
 
@@ -77,4 +80,26 @@ start = time.time()
 train_df["text"] = [list(clean_post_tokenize(tweet_doc)) for tweet_doc in
         tweet_docs]
 print("Cleaned in in " + str(time.time() - start) + "s.")
-print(train_df.head())
+
+# Convert tokens to their vector representations and save them as numpy arrays
+train_df["text"] = train_df["text"].map(
+        lambda l: np.array(list(map(lambda t: t.vector, l))))
+# Sum the vectors for each token to get one vector per tweet
+train_df["text"] = train_df["text"].map(lambda arr: np.sum(arr, axis=0))
+
+# Create and fill a numpy array with the entire input matrix row-by-row because
+# pandas to_numpy() seems to produce weird results
+X = np.ndarray((len(train_df), len(train_df["text"][0])))
+for i in range(X.shape[0]):
+    X[i,:] = train_df["text"][i]
+# Get the targets as a numpy array
+y = train_df["target"].to_numpy()
+
+
+# Initialize an MLP classifier and get cross-validation scores
+print("Training and cross-validating...")
+start = time.time()
+classifier = MLPClassifier(hidden_layer_sizes=(500,))
+scores = cross_val_score(classifier, X, y, cv=5, scoring="accuracy")
+print("Done in", (time.time() - start), "seconds.")
+print("Scores are", scores)
