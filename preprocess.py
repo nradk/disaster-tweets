@@ -105,12 +105,19 @@ def convert_to_numpy(save_to_disk=False):
     # arrays
     train_df["text"] = train_df["text"].map(
             lambda l: np.array(list(map(lambda t: t.vector, l))))
-    # Sum the vectors for each token to get one vector per tweet
-    train_df["text"] = train_df["text"].map(lambda arr: np.sum(arr, axis=0))
+    # Get the size of a single word vector
+    vector_size = train_df["text"][0].shape[1]
+    # Find out the maximum length of the sentences (in words/tokens)
+    max_length = max(train_df["text"].map(lambda arr: len(arr)))
+
+    # Resize the token-vector array so that all are of the same length (with
+    # zero padding)
+    train_df["text"] = train_df["text"].map(lambda arr: np.resize(arr,
+        (max_length, vector_size)))
 
     # Create and fill a numpy array with the entire input matrix row-by-row
     # because pandas to_numpy() seems to produce weird results
-    X = np.ndarray((len(train_df), len(train_df["text"][0])))
+    X = np.ndarray((len(train_df), max_length, vector_size))
     for i in range(X.shape[0]):
         X[i,:] = train_df["text"][i]
     # Get the targets as a numpy array
@@ -119,7 +126,7 @@ def convert_to_numpy(save_to_disk=False):
     if save_to_disk:
         print("Saving computed vectors to disk")
         start = time.time()
-        np.savez(saved_vectors_file, X=X, y=y)
+        np.savez_compressed(saved_vectors_file, X=X, y=y)
         print("Saved computed vectors to disk in", time.time() - start,
             "seconds")
     return X,y
