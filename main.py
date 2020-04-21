@@ -8,17 +8,15 @@ import torch.optim as optim
 
 import preprocess
 
-X, y = None, None
+Xtrain, ytrain = None, None
+Xtest = None
 
-if preprocess.have_saved_vectors():
-    X, y = preprocess.load_saved_vectors()
-else:
-    preprocess.load_data()
-    preprocess.clean_data()
-    X, y = preprocess.convert_to_numpy(save_to_disk=True)
+Xtrain, ytrain  = preprocess.load_and_preprocess_train(use_saved_vectors=True)
 
 # Convert the numpy arrays to torch vectors
-X, y = torch.from_numpy(X), torch.from_numpy(y)
+X, y = torch.from_numpy(Xtrain[:6000,:,:]), torch.from_numpy(ytrain[:6000])
+Xv, yv = torch.from_numpy(Xtrain[6000:,:,:]), torch.from_numpy(ytrain[6000:])
+
 
 N = X.size()[0]
 L = X.size()[1]
@@ -61,7 +59,8 @@ net.zero_grad()
 loss_function = nn.CrossEntropyLoss()
 optimizer = optim.Adam(net.parameters())
 
-EPOCHS = 5
+EPOCHS = 1
+print("Starting training")
 for epoch in range(EPOCHS):
     for i in range(N):
         optimizer.zero_grad()
@@ -71,3 +70,10 @@ for epoch in range(EPOCHS):
         loss.backward()
         optimizer.step()
     print("Epoch {} done".format(epoch))
+
+_, predicted = torch.max(net(torch.transpose(Xv, 1, 2).float()), 1)
+total = yv.size()[0]
+correct = (predicted == yv).sum().item()
+print("Correct =", correct)
+print("Total =", total)
+print("Accuracy =", (correct/total))
