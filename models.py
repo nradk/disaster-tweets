@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import skorch
+import functools
 
 
 class Model:
@@ -27,6 +29,14 @@ class Model:
 
         :param input_data: The input to perform inference on. Pytorch tensor.
         :returns: A pytorch tensor containing inference outputs.
+        """
+        pass
+
+    def get_sklearn_compatible_estimator(self):
+        """
+        Get a scikit-learn compatible estimator that implements the
+        scikit-learn base estimator API. Can be either an actual scikit-learn
+        class or a compatible implementation like from skorch.
         """
         pass
 
@@ -70,11 +80,15 @@ class CNNModel(Model):
             return num_features
 
     def __init__(self, channels, size):
+        self.channels = channels
+        self.size = size
         self.net = self.Net(channels, size)
         self.net.float()
-        self.loss_function = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.net.parameters())
-        self.EPOCHS = 1
+        self.criterion = nn.CrossEntropyLoss
+        self.loss_function = self.criterion()
+        self.optimizer_class = optim.Adam
+        self.optimizer = self.optimizer_class(self.net.parameters())
+        self.EPOCHS = 7
 
     def learn(self, input_data, labels):
         self.net.zero_grad()
@@ -85,14 +99,20 @@ class CNNModel(Model):
             for i in range(N):
                 self.optimizer.zero_grad()
                 target = torch.unsqueeze(y[i], 0)
-                transposed_input = torch.transpose(X[i, :], 0, 1)
-                output = self.net(torch.unsqueeze(transposed_input, 0).float())
+                output = self.net(torch.unsqueeze(X[i,:,:], 0))
                 loss = self.loss_function(output, target)
                 loss.backward()
                 self.optimizer.step()
             print("Epoch {} done".format(epoch))
 
     def infer(self, input_data):
-        X = input_data
-        _, predicted = torch.max(self.net(torch.transpose(X, 1, 2).float()), 1)
+        _, predicted = torch.max(self.net(input_data), 1)
         return predicted
+
+    def get_sklearn_compatible_estimator(self):
+        net_with_params = functools.partial(self.Net, channels=self.channels,
+                                            size=self.size)
+        return skorch.NeuralNetClassifier(net_with_params,
+                                          max_epochs=self.EPOCHS,
+                                          criterion=self.criterion,
+                                          optimizer=self.optimizer_class)
