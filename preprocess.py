@@ -17,6 +17,8 @@ DATA_DIR = 'data/'
 
 train_vectors_file = DATA_DIR + 'train_vectors.npz'
 test_vectors_file = DATA_DIR + 'test_vectors.npz'
+train_hash_file = DATA_DIR + 'train_vectors_hash.txt'
+test_hash_file = DATA_DIR + 'test_vectors_hash.txt'
 
 # Compile url regex (a basic one)
 url_regex = re.compile("(http|https)://[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(/\S*)?")
@@ -36,8 +38,23 @@ def load_nlp_model():
     return spacy.load("en_core_web_lg")
 
 
-def have_saved_vectors(test=False):
-    return os.path.isfile(test_vectors_file if test else train_vectors_file)
+def write_hash_to_file(filename, hash_value):
+    with open(filename, 'w') as f:
+        f.write("%d" % hash_value)
+
+
+def read_hash_from_file(filename):
+    hash_value = -1
+    with open(filename, 'r') as f:
+        hash_value = int(f.read())
+    return hash_value
+
+
+def have_saved_vectors(df_hash, test=False):
+    hash_file = test_hash_file if test else train_hash_file
+    vectors_file = test_vectors_file if test else train_vectors_file
+    return (os.path.isfile(vectors_file) and os.path.isfile(hash_file) and
+            df_hash == read_hash_from_file(hash_file))
 
 
 def load_saved_vectors(filename, *keys):
@@ -119,9 +136,14 @@ def convert_to_numpy(df):
     return X
 
 
+def get_df_hash(df):
+    return pd.util.hash_pandas_object(df).sum()
+
+
 def preprocess_train(X_train_df, y_train_df, use_saved_vectors=True):
     X, y = None, None
-    if use_saved_vectors and have_saved_vectors():
+    df_hash = get_df_hash(X_train_df) + get_df_hash(y_train_df)
+    if use_saved_vectors and have_saved_vectors(df_hash, test=False):
         X, y = load_saved_vectors(train_vectors_file, "X", "y")
     else:
         nlp = load_nlp_model()
@@ -129,18 +151,21 @@ def preprocess_train(X_train_df, y_train_df, use_saved_vectors=True):
         X = convert_to_numpy(X_train_df)
         y = y_train_df.to_numpy()
         save_vectors(train_vectors_file, X=X, y=y)
+        write_hash_to_file(train_hash_file, df_hash)
     return X, y
 
 
 def preprocess_test(X_test_df, use_saved_vectors=True):
     X = None
-    if use_saved_vectors and have_saved_vectors(test=True):
+    df_hash = get_df_hash(X_test_df)
+    if use_saved_vectors and have_saved_vectors(df_hash, test=True):
         X = load_saved_vectors(test_vectors_file, "X")
     else:
         nlp = load_nlp_model()
         clean_data_(X_test_df, nlp, test=True)
         X = convert_to_numpy(X_test_df)
         save_vectors(test_vectors_file, X=X)
+        write_hash_to_file(test_hash_file, df_hash)
     return X
 
 
