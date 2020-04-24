@@ -11,11 +11,10 @@ import re
 import wordninja
 import functools
 
+import load
+
 DATA_DIR = 'data/'
 
-train_file = DATA_DIR + 'train.csv'
-test_file = DATA_DIR + 'test.csv'
-sample_file = DATA_DIR + 'sample_submission.csv'
 train_vectors_file = DATA_DIR + 'train_vectors.npz'
 test_vectors_file = DATA_DIR + 'test_vectors.npz'
 
@@ -26,45 +25,38 @@ nontext_regex = re.compile("[^A-Za-z]+")
 # Compile regex to detect @ mentions
 mention_regex = re.compile("@\S+")
 # Compile regex to detect various mis-encoded punctuation characters
-misenc_regex = re.compile("&amp;");
+misenc_regex = re.compile("&amp;")
 # Compile regex to check if text is composed entirely of letters and digits
-alphanum_regex = re.compile("[A-Za-z0-9]+");
-
-train_df = None
-test_df = None
-nlp = None
-
-
-def load_data(test=False):
-    if test:
-        global test_df
-        test_df = pd.read_csv(test_file, header=0)
-    else:
-        global train_df
-        train_df = pd.read_csv(train_file, header=0)
+alphanum_regex = re.compile("[A-Za-z0-9]+")
 
 
 def load_nlp_model():
-    global nlp
     # Load the SpaCy English language model trained on OntoNotes with GloVe
     # vectors trained on Common Crawl.
-    nlp = spacy.load("en_core_web_lg")
+    return spacy.load("en_core_web_lg")
 
 
 def have_saved_vectors(test=False):
     return os.path.isfile(test_vectors_file if test else train_vectors_file)
 
 
-def load_saved_vectors(test=False):
+def load_saved_vectors(filename, *keys):
     print("Loading saved vectors")
     start = time.time()
-    npzfile = np.load(test_vectors_file if test else train_vectors_file)
+    npzfile = np.load(filename)
     print("Loaded saved vectors in", time.time() - start, "seconds")
-    return (npzfile['X'], npzfile['y']) if not test else npzfile['X']
+    return tuple([npzfile[key] for key in keys])
+
+
+def save_vectors(filename, **kwargs):
+    print("Saving computed vectors to disk")
+    start = time.time()
+    np.savez_compressed(filename, **kwargs)
+    print("Saved computed vectors to disk in", time.time() - start, "seconds")
 
 
 # Data cleaning prior to tokenization
-def clean_pre_tokenize(text):
+def clean_pre_tokenize(text, nlp):
     text = url_regex.sub("", text)
     text = misenc_regex.sub("", text)
     text = mention_regex.sub("", text)
@@ -78,40 +70,37 @@ def clean_pre_tokenize(text):
             split_words.append(word)
     return " ".join(split_words)
 
+
 # Data cleaning after tokenization (takes token list and returns word list)
 def clean_post_tokenize(token_list):
     # Filter the list to remove non-text tokens and return result
     return filter(lambda t: not t.is_oov and not t.is_stop, token_list)
 
 
-def clean_data(test=False):
-    global train_df, test_df, nlp
-    df = test_df if test else train_df
+def clean_data_(X_df, nlp):
     print("Performing pre-tokenization cleaning...")
     start = time.time()
     # Perform pre-tokenization cleaning
-    df["text"] = df["text"].map(clean_pre_tokenize)
+    X_df["text"] = X_df["text"].map(lambda text: clean_pre_tokenize(text, nlp))
     print("Cleaned in", (time.time() - start), "seconds. Now tokenizing...")
     start = time.time()
     # Perform tokenization
-    tweet_docs = df["text"].map(nlp)
+    tweet_docs = X_df["text"].map(nlp)
     print("Tokenized in " + str(time.time() - start) + "s.")
 
     # Clean tokens
     print("Performing post-tokenization cleaning...")
     start = time.time()
-    df["text"] = [list(clean_post_tokenize(tweet_doc)) for tweet_doc in
-            tweet_docs]
+    X_df["text"] = [list(clean_post_tokenize(tweet_doc)) for tweet_doc in
+                    tweet_docs]
     print("Cleaned in in " + str(time.time() - start) + "s.")
 
 
-def convert_to_numpy(test=False, save_to_disk=False):
-    global train_df, test_df
-    df = test_df if test else train_df
+def convert_to_numpy(df):
     # Convert tokens to their vector representations and save them as numpy
     # arrays
     df["text"] = df["text"].map(
-            lambda l: np.array(list(map(lambda t: t.vector, l))))
+        lambda l: np.array(list(map(lambda t: t.vector, l))))
     # Get the size of a single word vector
     vector_size = df["text"][0].shape[1]
     # Find out the maximum length of the sentences (in words/tokens)
@@ -119,52 +108,39 @@ def convert_to_numpy(test=False, save_to_disk=False):
 
     # Resize the token-vector array so that all are of the same length (with
     # zero padding)
-    df["text"] = df["text"].map(lambda arr: np.resize(arr,
-        (max_length, vector_size)))
+    df["text"] = df["text"].map(lambda arr:
+                                np.resize(arr, (max_length, vector_size)))
 
     # Create and fill a numpy array with the entire input matrix row-by-row
     # because pandas to_numpy() seems to produce weird results
     X = np.ndarray((len(df), max_length, vector_size))
     for i in range(X.shape[0]):
-        X[i,:] = df["text"][i]
-    # Get the targets as a numpy array
-
-    if not test:
-        y = df["target"].to_numpy()
-
-    if save_to_disk:
-        print("Saving computed vectors to disk")
-        start = time.time()
-        if test:
-            np.savez_compressed(test_vectors_file, X=X)
-        else:
-            np.savez_compressed(train_vectors_file, X=X, y=y)
-        print("Saved computed vectors to disk in", time.time() - start,
-            "seconds")
-    return X,y if not test else X
+        X[i, :] = df["text"][i]
+    return X
 
 
-def load_and_preprocess_train(use_saved_vectors=True):
+def preprocess_train(X_train_df, y_train_df, use_saved_vectors=True):
     X, y = None, None
     if use_saved_vectors and have_saved_vectors():
-        X, y = load_saved_vectors()
+        X, y = load_saved_vectors(train_vectors_file, "X", "y")
     else:
-        load_data()
-        load_nlp_model()
-        clean_data()
-        X, y = convert_to_numpy(save_to_disk=True)
+        nlp = load_nlp_model()
+        clean_data_(X_train_df, nlp)
+        X = convert_to_numpy(X_train_df)
+        y = y_train_df.to_numpy()
+        save_vectors(train_vectors_file, X=X, y=y)
     return X, y
 
 
-def load_and_preprocess_test(use_saved_vectors=True):
+def preprocess_test(X_test_df, use_saved_vectors=True):
     X = None
     if use_saved_vectors and have_saved_vectors(test=True):
-        X = load_saved_vectors(test=True)
+        X = load_saved_vectors(test_vectors_file, "X")
     else:
-        load_data(test=True)
-        load_nlp_model()
-        clean_data(test=True)
-        X = convert_to_numpy(test=True,  save_to_disk=True)
+        nlp = load_nlp_model()
+        clean_data_(X_test_df, nlp, test=True)
+        X = convert_to_numpy(X_test_df)
+        save_vectors(test_vectors_file, X=X)
     return X
 
 

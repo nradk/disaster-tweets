@@ -7,8 +7,10 @@ import sklearn.model_selection
 
 import preprocess
 import models
+import load
 
-Xtrain, ytrain = preprocess.load_and_preprocess_train(use_saved_vectors=True)
+Xtrain, ytrain = preprocess.preprocess_train(*load.load_train_data(),
+                                             use_saved_vectors=True)
 Xtrain, ytrain = torch.from_numpy(Xtrain), torch.from_numpy(ytrain)
 
 # Change types of all tensors to float (leaving double produces an obscure
