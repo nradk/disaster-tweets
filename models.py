@@ -32,23 +32,26 @@ class CNNModel(nn.Module, Model):
     `forward()` for implementation details.
     """
 
-    def __init__(self, channels, size):
+    def __init__(self, vector_size, sentence_length):
         super(CNNModel, self).__init__()
-        self.channels = channels
-        self.size = size
+        self.channels = vector_size
+        self.size = sentence_length
         # First convolution layer.  C input channels, 4 output channels and
         # convolution kernel size 3.
-        self.conv1 = nn.Conv1d(channels, 4, 3, padding=1)
+        self.conv1 = nn.Conv1d(self.channels, 4, 3, padding=1)
         # Second convolution layer. 4 input channels from the previous
         # layer, 8 output channels and convolution kernel size 5.
         self.conv2 = nn.Conv1d(4, 8, 5, padding=2)
         # Fuly connected layers
-        self.fc1 = nn.Linear(8 * size, 40)
+        self.fc1 = nn.Linear(8 * self.size, 40)
         self.fc2 = nn.Linear(40, 2)
         self.float()
         self.zero_grad()
 
     def forward(self, x):
+        # Transpose the last two dimensions of Xtrain so that the elements of
+        # word vectors become the channels.
+        x = x.transpose_(1, 2)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view(-1, self.num_flat_features(x))
@@ -64,11 +67,12 @@ class CNNModel(nn.Module, Model):
         return num_features
 
     def get_sklearn_compatible_estimator(self):
-        EPOCHS = 7
+        EPOCHS = 3
         criterion = nn.CrossEntropyLoss
         optimizer = optim.Adam
-        net_with_params = functools.partial(CNNModel, channels=self.channels,
-                                            size=self.size)
+        net_with_params = functools.partial(CNNModel,
+                                            vector_size=self.channels,
+                                            sentence_length=self.size)
         return skorch.NeuralNetClassifier(net_with_params, max_epochs=EPOCHS,
                                           criterion=criterion,
                                           optimizer=optimizer)

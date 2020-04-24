@@ -5,12 +5,12 @@ import torch
 import sklearn
 import sklearn.model_selection
 
-import preprocess
+import preprocess.glove_vectorize as glove_vectorize
 import models
 import load
 
-Xtrain, ytrain = preprocess.preprocess_train(*load.load_train_data(),
-                                             use_saved_vectors=True)
+Xtrain, ytrain = glove_vectorize.preprocess_train(*load.load_train_data(),
+                                                  use_saved_vectors=True)
 Xtrain, ytrain = torch.from_numpy(Xtrain), torch.from_numpy(ytrain)
 
 # Change types of all tensors to float (leaving double produces an obscure
@@ -18,15 +18,8 @@ Xtrain, ytrain = torch.from_numpy(Xtrain), torch.from_numpy(ytrain)
 Xtrain = Xtrain.type(dtype=torch.FloatTensor)
 y = ytrain.type(dtype=torch.FloatTensor)
 
-# Transpose the last two dimensions of Xtrain so that the elements of word
-# vectors become the channels.
-Xtrain.transpose_(1, 2)
-
-N = Xtrain.size()[0]
-C = Xtrain.size()[1]
-L = Xtrain.size()[2]
-
-cnn_model = models.CNNModel(channels=C, size=L)
+cnn_model = models.CNNModel(vector_size=Xtrain.size()[2],
+                            sentence_length=Xtrain.size()[1])
 
 print("Performing cross-validation")
 clf = cnn_model.get_sklearn_compatible_estimator()
