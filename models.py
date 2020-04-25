@@ -49,9 +49,10 @@ class CNNModel(nn.Module, Model):
         self.zero_grad()
 
     def forward(self, x):
+        # print(x)
         # Transpose the last two dimensions of Xtrain so that the elements of
         # word vectors become the channels.
-        x = x.transpose_(1, 2)
+        x = x.transpose(1, 2)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view(-1, self.num_flat_features(x))

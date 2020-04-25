@@ -10,6 +10,7 @@ from collections import Counter
 import re
 import wordninja
 import functools
+import sklearn
 
 import load
 
@@ -121,7 +122,9 @@ def convert_to_numpy(df):
     # Get the size of a single word vector
     vector_size = df["text"][0].shape[1]
     # Find out the maximum length of the sentences (in words/tokens)
-    max_length = max(df["text"].map(lambda arr: len(arr)))
+    # max_length = max(df["text"].map(lambda arr: len(arr)))
+    # TODO sort this out (using a fixed max length now)
+    max_length = 34
 
     # Resize the token-vector array so that all are of the same length (with
     # zero padding)
@@ -140,26 +143,25 @@ def get_df_hash(df):
     return pd.util.hash_pandas_object(df).sum()
 
 
-def preprocess_train(X_train_df, y_train_df, use_saved_vectors=True):
+def preprocess_train(X_train_df, use_saved_vectors=True):
     X, y = None, None
-    df_hash = get_df_hash(X_train_df) + get_df_hash(y_train_df)
+    df_hash = get_df_hash(X_train_df)
     if use_saved_vectors and have_saved_vectors(df_hash, test=False):
-        X, y = load_saved_vectors(train_vectors_file, "X", "y")
+        X, = load_saved_vectors(train_vectors_file, "X")
     else:
         nlp = load_nlp_model()
         clean_data_(X_train_df, nlp)
         X = convert_to_numpy(X_train_df)
-        y = y_train_df.to_numpy()
-        save_vectors(train_vectors_file, X=X, y=y)
+        save_vectors(train_vectors_file, X=X)
         write_hash_to_file(train_hash_file, df_hash)
-    return X, y
+    return X
 
 
 def preprocess_test(X_test_df, use_saved_vectors=True):
     X = None
     df_hash = get_df_hash(X_test_df)
     if use_saved_vectors and have_saved_vectors(df_hash, test=True):
-        X = load_saved_vectors(test_vectors_file, "X")
+        X, = load_saved_vectors(test_vectors_file, "X")
     else:
         nlp = load_nlp_model()
         clean_data_(X_test_df, nlp, test=True)
@@ -169,5 +171,13 @@ def preprocess_test(X_test_df, use_saved_vectors=True):
     return X
 
 
-if __name__ == "__main__":
-    print(load_and_preprocess_train(True))
+def get_transformer_train():
+    return sklearn.preprocessing.FunctionTransformer(preprocess_train)
+
+
+def get_transformer_test():
+    return sklearn.preprocessing.FunctionTransformer(preprocess_test)
+
+
+def get_instance_dims():
+    return (34, 300)
