@@ -11,35 +11,34 @@ import preprocess.glove_vectorize as glove_vectorize
 import models
 import load
 
+
+# Load training and test data in Pandas dataframes
 X_train_df, y_train_df = load.load_train_data()
-y = torch.from_numpy(y_train_df.to_numpy()).type(dtype=torch.FloatTensor)
 X_test_df = load.load_test_data()
 
-glove_vectorizer = glove_vectorize.get_transformer_train()
-torch_converter = FunctionTransformer(torch.from_numpy)
-type_caster = FunctionTransformer(lambda t: t.type(dtype=torch.FloatTensor))
+
+# GLOVE + CNN
+# Preprocess training set and convert to torch tensor
+X_train = glove_vectorize.preprocess_train(X_train_df)
+X_train = torch.from_numpy(X_train)
+y_train = y_train_df.to_numpy()
+y_train = torch.from_numpy(y_train)
+# Type cast to float tensor (our classifier doesn't seem to work with the
+# default double tensor)
+X_train = X_train.type(dtype=torch.FloatTensor)
+y_train = y_train.type(dtype=torch.FloatTensor)
+# Convert the target vector to one-hot encoding
 
 sentence_length, vector_size = glove_vectorize.get_instance_dims()
 cnn_model = models.CNNModel(vector_size=vector_size,
                             sentence_length=sentence_length)
 clf = cnn_model.get_sklearn_compatible_estimator()
 
-glove_CNN_pipeline = Pipeline([
-    ('glove_vectorizer', glove_vectorizer),
-    ('torch_converter', torch_converter),
-    ('type_caster', type_caster),
-    ('cnn_classifier', clf),
-])
+# clf.fit(X_train, y_train_df)
+# exit()
 
-glove_CNN_pipeline.fit(X_train_df, y_train_df)
-print(glove_CNN_pipeline.predict(X_test_df))
-
-# TODO K-fold cross validation is does not work with our pipeline, and even if
-# it did work it would be very inefficient due to the word vectors having to be
-# recalculated. Find a way to fix this.
-# print("Performing cross-validation")
-# scores = sklearn.model_selection.cross_val_score(glove_CNN_pipeline,
-                                                 # X_train_df, y_train_df, cv=5)
-# print("Cross-validation scores:")
-# print(scores)
-# print("Average cross-validation score:", sum(scores)/len(scores))
+print("Performing cross-validation")
+scores = sklearn.model_selection.cross_val_score(clf, X_train, y_train_df, cv=5)
+print("Cross-validation scores:")
+print(scores)
+print("Average cross-validation score:", sum(scores)/len(scores))

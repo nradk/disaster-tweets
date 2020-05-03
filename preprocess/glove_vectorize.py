@@ -171,13 +171,5 @@ def preprocess_test(X_test_df, use_saved_vectors=True):
     return X
 
 
-def get_transformer_train():
-    return sklearn.preprocessing.FunctionTransformer(preprocess_train)
-
-
-def get_transformer_test():
-    return sklearn.preprocessing.FunctionTransformer(preprocess_test)
-
-
 def get_instance_dims():
     return (34, 300)
