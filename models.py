@@ -78,3 +78,51 @@ class CNNModel(nn.Module, Model):
         return skorch.NeuralNetClassifier(net_with_params, max_epochs=EPOCHS,
                                           criterion=criterion,
                                           optimizer=optimizer)
+
+
+class LSTMModel(nn.Module, Model):
+    """
+    Implements an Long Short-Term Memory network
+
+    Implements a uni-directional Long Short-Term Memory network for
+    classification. See constructor and method `forward()` for implementation
+    details.
+    """
+
+    def __init__(self, vector_size):
+        super(LSTMModel, self).__init__()
+        self.vector_size = vector_size
+        # Set the hidden state vector dimension to be half of the word vector
+        # size. TODO experiment with this hyperparameter.
+        self.hidden_state_dim = vector_size
+        self.lstm = nn.LSTM(vector_size, self.hidden_state_dim,
+                            batch_first=True, bidirectional=True)
+        # Create a linear layer to predic the output class from the (last)
+        # hidden state.
+        self.fc1 = nn.Linear(self.hidden_state_dim, 30)
+        self.fc2 = nn.Linear(30, 2)
+        self.float()
+        self.zero_grad()
+
+    def forward(self, x):
+        # The input x is a tensor where the first dimension is the batch
+        # dimension, the second dimension is sentence length and the third is
+        # the word vector size. We need to reshape this because the LSTM layer
+        # expects the input to to have the mini-batch in the second dimension.
+        # print("forward(): x.size()", x.size())
+        #x = x.view(x.size()[1], x.size()[0], -1)
+        _, (x, _) = self.lstm(x)
+        x = x[0,:,:] + x[1,:,:]
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+    def get_sklearn_compatible_estimator(self):
+        EPOCHS = 5
+        criterion = nn.CrossEntropyLoss
+        optimizer = optim.Adam
+        net_with_params = functools.partial(LSTMModel,
+                                            vector_size=self.vector_size)
+        return skorch.NeuralNetClassifier(net_with_params, max_epochs=EPOCHS,
+                                          criterion=criterion,
+                                          optimizer=optimizer)

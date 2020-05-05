@@ -92,7 +92,13 @@ def clean_pre_tokenize(text, nlp):
 # Data cleaning after tokenization (takes token list and returns word list)
 def clean_post_tokenize(token_list):
     # Filter the list to remove non-text tokens and return result
-    return filter(lambda t: not t.is_oov and not t.is_stop, token_list)
+    filtered = list(filter(lambda t: not t.is_oov and not t.is_stop,
+                           token_list))
+    if len(filtered) == 0:
+        filtered = list(filter(lambda t: not t.is_oov, token_list))
+        if len(filtered) == 0:
+            print("Again empty after loose filtering", token_list)
+    return filtered
 
 
 def clean_data_(X_df, nlp):
@@ -113,6 +119,16 @@ def clean_data_(X_df, nlp):
                     tweet_docs]
     print("Cleaned in in " + str(time.time() - start) + "s.")
 
+def zero_pad(length, array):
+    """ Zero pad an array in the first dimension
+    """
+    if not isinstance(array.shape, tuple) or len(array.shape) != 2 or array.shape[1] != 300:
+        print(array.shape)
+        print(array)
+    new_shape = (length, *array.shape[1:])
+    new_array = np.zeros(new_shape)
+    new_array[:array.shape[0]] = array
+    return new_array
 
 def convert_to_numpy(df):
     # Convert tokens to their vector representations and save them as numpy
@@ -128,14 +144,13 @@ def convert_to_numpy(df):
 
     # Resize the token-vector array so that all are of the same length (with
     # zero padding)
-    df["text"] = df["text"].map(lambda arr:
-                                np.resize(arr, (max_length, vector_size)))
+    df["text"] = df["text"].map(functools.partial(zero_pad, max_length))
 
     # Create and fill a numpy array with the entire input matrix row-by-row
     # because pandas to_numpy() seems to produce weird results
     X = np.ndarray((len(df), max_length, vector_size))
     for i in range(X.shape[0]):
-        X[i, :] = df["text"][i]
+        X[i] = df["text"][i]
     return X
 
 
@@ -169,6 +184,31 @@ def preprocess_test(X_test_df, use_saved_vectors=True):
         save_vectors(test_vectors_file, X=X)
         write_hash_to_file(test_hash_file, df_hash)
     return X
+
+def get_as_word_vector_sequences(X_array):
+    """ Return the input (an output from preprocess_t*), which is a large numpy
+    array of fixed dimensions, with the first axis being the data instances,
+    the second being the sentences (padded with zero vectors to have same size)
+    and third being the word vectors, as a list of differently-sized numpy
+    arrays where every element in the list is an instance, the first dimension
+    of the array is the sentence and the second is the word vectors.
+    """
+    instances = []
+    for i in range(X_array.shape[0]):
+        sentence = X_array[i,:,:]
+        # Remove zero vectors
+        sentence = sentence[~np.all(sentence == 0, axis=1)]
+        instances.append(sentence)
+    return instances
+
+def get_sentence_lengths(X_array):
+    sentence_lengths = []
+    for i in range(X_array.shape[0]):
+        sentence = X_array[i,:,:]
+        sentence = sentence[~np.all(sentence == 0, axis=1)]
+        sentence_lengths.append(len(sentence))
+    #print("sentence_lengths:", sentence_lenghts)
+    return sentence_lengths
 
 
 def get_instance_dims():
