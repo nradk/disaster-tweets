@@ -69,7 +69,7 @@ class CNNModel(nn.Module, Model):
         return num_features
 
     def get_sklearn_compatible_estimator(self):
-        EPOCHS = 3
+        EPOCHS = 5
         criterion = nn.CrossEntropyLoss
         optimizer = optim.Adam
         net_with_params = functools.partial(CNNModel,
@@ -118,7 +118,7 @@ class LSTMModel(nn.Module, Model):
         return x
 
     def get_sklearn_compatible_estimator(self):
-        EPOCHS = 5
+        EPOCHS = 7
         criterion = nn.CrossEntropyLoss
         optimizer = optim.Adam
         net_with_params = functools.partial(LSTMModel,

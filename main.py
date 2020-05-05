@@ -7,6 +7,8 @@ import sklearn.model_selection
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import VotingClassifier
+import functools
 
 import preprocess.glove_vectorize as glove_vectorize
 import models
@@ -24,67 +26,49 @@ X_train = glove_vectorize.preprocess_train(X_train_df)
 y_train = y_train_df.to_numpy()
 
 
-def glove_cnn_run(X_train, y_train):
-    global y_train_df
+def get_cnn_classifier():
     # GLOVE + CNN
-    X_train = torch.from_numpy(X_train)
-    y_train = torch.from_numpy(y_train)
+    to_tensor = FunctionTransformer(torch.from_numpy)
     # Type cast to float tensor (our classifier doesn't seem to work with the
     # default double tensor)
-    X_train = X_train.type(dtype=torch.FloatTensor)
-    y_train = y_train.type(dtype=torch.FloatTensor)
+    to_float = FunctionTransformer(lambda t: t.type(dtype=torch.FloatTensor))
 
     sentence_length, vector_size = glove_vectorize.get_instance_dims()
     cnn_model = models.CNNModel(vector_size=vector_size,
                                 sentence_length=sentence_length)
-    clf = cnn_model.get_sklearn_compatible_estimator()
-
-    print("Performing cross-validation")
-    scores = sklearn.model_selection.cross_val_score(
-        clf, X_train, y_train_df, cv=5)
-    print("Cross-validation scores:")
-    print(scores)
-    print("Average cross-validation score:", sum(scores)/len(scores))
+    classifier = cnn_model.get_sklearn_compatible_estimator()
+    return Pipeline([('to_tensor', to_tensor), ('to_float', to_float),
+                     ('cnn', classifier)])
 
 
-def glove_lstm_run(X_train, y_train):
+def get_lstm_classifier():
     global y_train_df
-    # GLOVE + LSTM
     # Convert to a format suitable for RNNs
-    X_train = glove_vectorize.get_as_word_vector_sequences(X_train)
-    X_train = list(map(torch.from_numpy, X_train))
-    y_train = torch.from_numpy(y_train)
+    to_tensor = FunctionTransformer(torch.from_numpy)
     # Type cast to float tensor (our classifier doesn't seem to work with the
     # default double tensor)
-    X_train = list(map(lambda x: x.type(dtype=torch.FloatTensor), X_train))
-    y_train = y_train.type(dtype=torch.FloatTensor)
-
-    X_train = torch.nn.utils.rnn.pad_sequence(X_train, padding_value=0,
-                                              batch_first=True)
+    to_float = FunctionTransformer(lambda t: t.type(dtype=torch.FloatTensor))
 
     _, vector_size = glove_vectorize.get_instance_dims()
     lstm_model = models.LSTMModel(vector_size=vector_size)
-    clf = lstm_model.get_sklearn_compatible_estimator()
-
-    print("Performing cross-validation")
-    scores = sklearn.model_selection.cross_val_score(clf, X_train, y_train_df,
-                                                     cv=3)
-    print("Cross-validation scores:")
-    print(scores)
-    print("Average cross-validation score:", sum(scores)/len(scores))
+    return Pipeline([('to_tensor', to_tensor), ('to_float', to_float),
+                     ('lstm', lstm_model.get_sklearn_compatible_estimator())])
 
 
-def glove_knn_run(X_train, y_train):
+def get_knn_classifier():
     global y_train_df
-    X_train = np.sum(X_train, axis=1)
-    knn_classifier = KNeighborsClassifier()
-
-    print("Performing cross-validation")
-    scores = sklearn.model_selection.cross_val_score(knn_classifier, X_train,
-                                                     y_train_df, cv=3)
-    print("Cross-validation scores:")
-    print(scores)
-    print("Average cross-validation score:", sum(scores)/len(scores))
+    sum_vectors = FunctionTransformer(functools.partial(np.sum, axis=1))
+    return Pipeline([('sum_vectors', sum_vectors),
+                     ('knn', KNeighborsClassifier())])
 
 
-glove_knn_run(X_train, y_train)
+ensemble = VotingClassifier(estimators=[('cnn', get_cnn_classifier()),
+                                        ('lstm', get_lstm_classifier()),
+                                        ('knn', get_knn_classifier())])
+
+print("Performing cross-validation")
+scores = sklearn.model_selection.cross_val_score(ensemble, X_train,
+                                                 y_train_df, cv=3)
+print("Cross-validation scores:")
+print(scores)
+print("Average cross-validation score:", sum(scores)/len(scores))
